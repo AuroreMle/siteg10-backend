@@ -4,6 +4,8 @@ const app = express();
 const port = process.env.PORT || 3000;
 const connection = require('./database'); // Importer la configuration de connexion à la base de données
 
+
+
 app.use(cors());
 app.use(express.json()); // Pour parser les requêtes JSON
 
@@ -127,13 +129,58 @@ app.get('/user-history/:userId', (req, res) => {
 
 // Route pour récupérer l'historique des gains pour l'admin
 app.get('/admin-history', (req, res) => {
-  connection.query('SELECT * FROM user_gains', (error, results) => {
+  const sql = `
+    SELECT
+      ug.id,
+      ug.validation_date AS date,
+      ug.code,
+      ug.gain,
+      ug.expiry_date AS expiryDate,
+      u.username,
+      ug.status,
+      ug.status_date AS statusDate
+    FROM
+      user_gains ug
+    JOIN
+      users u ON ug.user_id = u.id;
+  `;
+
+  connection.query(sql, (error, results) => {
     if (error) {
-      return res.status(500).json({ message: 'Erreur lors de la récupération de l\'historique' });
+      console.error('Erreur lors de la récupération de l\'historique:', error); // Ajouter un log d'erreur
+      return res.status(500).json({ message: 'Erreur lors de la récupération de l\'historique', error: error.message });
     }
     res.status(200).json(results);
   });
 });
+
+
+
+// Route pour mettre à jour le statut du gain
+app.patch('/update-status/:id', (req, res) => {
+  const id = req.params.id; // Récupération de l'ID depuis les paramètres de l'URL
+  const status = 'Remis le ' + new Date().toLocaleDateString(); // Format de statut avec date du jour
+
+  // Vérifier que l'ID est bien défini
+  if (!id) {
+    return res.status(400).json({ message: 'ID requis' });
+  }
+
+  // Mise à jour du statut et de la date dans la base de données
+  connection.query('UPDATE user_gains SET status = ?, status_date = NOW() WHERE id = ?', [status, id], (error, results) => {
+    if (error) {
+      console.error('Erreur lors de la mise à jour du statut :', error);
+      return res.status(500).json({ message: 'Erreur lors de la mise à jour du statut' });
+    }
+    if (results.affectedRows === 0) {
+      return res.status(404).json({ message: 'Gain non trouvé' });
+    }
+    res.status(200).json({ message: 'Statut mis à jour' });
+  });
+});
+
+
+
 
 // Démarrer le serveur
 app.listen(port, () => {
